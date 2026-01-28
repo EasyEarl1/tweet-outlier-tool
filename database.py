@@ -58,14 +58,42 @@ class Database:
     def __init__(self, db_path='tweet_outlier.db'):
         self.db_path = db_path
         try:
-            # Use absolute path for better compatibility with Vercel
-            if not os.path.isabs(db_path):
-                # For relative paths, use current directory or /tmp on Vercel
-                if os.environ.get('VERCEL') or os.environ.get('VERCEL_ENV'):
-                    db_path = os.path.join('/tmp', os.path.basename(db_path))
-                else:
+            # Check if we're on Vercel
+            is_vercel = os.environ.get('VERCEL') or os.environ.get('VERCEL_ENV')
+            
+            if is_vercel:
+                # On Vercel, try /tmp first, but fall back to in-memory if that fails
+                try:
+                    tmp_path = '/tmp/tweet_outlier.db'
+                    # Ensure /tmp directory exists (it should, but just in case)
+                    os.makedirs('/tmp', exist_ok=True)
+                    # Test if we can write to /tmp
+                    test_file = '/tmp/.test_write'
+                    try:
+                        with open(test_file, 'w') as f:
+                            f.write('test')
+                        os.remove(test_file)
+                        db_path = tmp_path
+                    except:
+                        # Can't write to /tmp, use in-memory database
+                        db_path = ':memory:'
+                        print("Warning: /tmp not writable on Vercel, using in-memory database")
+                except Exception as tmp_error:
+                    # Fall back to in-memory database
+                    db_path = ':memory:'
+                    print(f"Warning: Could not use /tmp on Vercel ({tmp_error}), using in-memory database")
+            else:
+                # Local development - use file-based database
+                if not os.path.isabs(db_path):
                     db_path = os.path.join(os.getcwd(), db_path)
-            self.engine = create_engine(f'sqlite:///{db_path}', echo=False, connect_args={'check_same_thread': False})
+            
+            # Create engine with appropriate connection string
+            if db_path == ':memory:':
+                connection_string = 'sqlite:///:memory:'
+            else:
+                connection_string = f'sqlite:///{db_path}'
+            
+            self.engine = create_engine(connection_string, echo=False, connect_args={'check_same_thread': False})
             Base.metadata.create_all(self.engine)
             self._ensure_columns()
             self.Session = sessionmaker(bind=self.engine)

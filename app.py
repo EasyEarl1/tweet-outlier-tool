@@ -12,19 +12,16 @@ app = Flask(__name__)
 
 # Initialize database with error handling for Vercel
 try:
-    # Use /tmp directory on Vercel for SQLite (ephemeral but writable)
-    import os
-    if os.environ.get('VERCEL'):
-        db_path = '/tmp/tweet_outlier.db'
-    else:
-        db_path = 'tweet_outlier.db'
-    db = Database(db_path=db_path)
+    # Database class will handle Vercel-specific path logic
+    db = Database()
 except Exception as e:
-    # On Vercel, if database init fails, create a dummy db object
-    # This allows the app to start even if DB isn't available
+    # On Vercel, if database init fails, allow app to start anyway
+    # This prevents the entire app from crashing
     import traceback
-    print(f"Warning: Database initialization failed: {e}")
-    print(traceback.format_exc())
+    error_msg = f"Warning: Database initialization failed: {e}"
+    print(error_msg)
+    # Print full traceback for debugging in Vercel logs
+    traceback.print_exc()
     db = None
 
 
