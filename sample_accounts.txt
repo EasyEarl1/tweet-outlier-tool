@@ -1,0 +1,10 @@
+# Sample Twitter accounts file
+# One username per line (with or without @)
+# Lines starting with # are ignored
+
+elonmusk
+jack
+naval
+paulg
+sama
+

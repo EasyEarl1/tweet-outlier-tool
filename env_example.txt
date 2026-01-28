@@ -1,0 +1,5 @@
+# TwitterAPI.io API Key
+# Get yours from: https://twitterapi.io
+# Copy this file to .env and add your API key
+TWITTER_API_KEY=your_api_key_here
+
