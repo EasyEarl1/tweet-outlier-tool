@@ -65,12 +65,23 @@ class Database:
         
         try:
             self.engine = create_engine(connection_string, echo=False, connect_args={'check_same_thread': False})
-            Base.metadata.create_all(self.engine)
+            # Create all tables - this must happen before any queries
+            Base.metadata.create_all(self.engine, checkfirst=True)
             self._ensure_columns()
             self.Session = sessionmaker(bind=self.engine)
+            print("Database initialized successfully with in-memory SQLite")
         except Exception as e:
             # If even in-memory fails, something is seriously wrong
+            import traceback
+            traceback.print_exc()
             raise Exception(f"Failed to initialize in-memory database: {str(e)}") from e
+    
+    def _ensure_tables(self):
+        """Ensure tables exist - call this before any queries if needed"""
+        try:
+            Base.metadata.create_all(self.engine, checkfirst=True)
+        except Exception as e:
+            print(f"Warning: Could not ensure tables exist: {e}")
 
     def _ensure_columns(self):
         """

@@ -116,24 +116,76 @@ def get_outliers():
 
 @app.route('/api/accounts')
 def get_accounts():
-    """Get all accounts"""
-    accounts = db.get_all_accounts()
-    result = []
-    for account in accounts:
-        # Count tweets and outliers for this account
-        tweets = db.get_tweets_by_account(account.id)
-        outlier_count = sum(1 for t in tweets if t.is_outlier)
-        
-        result.append({
-            'username': account.username,
-            'display_name': account.display_name or account.username,
-            'follower_count': account.follower_count,
-            'tweet_count': len(tweets),
-            'outlier_count': outlier_count,
-            'last_fetched_at': account.last_fetched_at.isoformat() if account.last_fetched_at else None
-        })
+    """Get all accounts - merge from database and persistent storage"""
+    if db is None:
+        # If database not available, return accounts from persistent storage only
+        try:
+            persisted_accounts = persistence.get_all_accounts()
+            result = []
+            for acc in persisted_accounts:
+                result.append({
+                    'username': acc['username'],
+                    'display_name': acc.get('display_name') or acc['username'],
+                    'follower_count': acc.get('follower_count', 0),
+                    'tweet_count': 0,
+                    'outlier_count': 0,
+                    'last_fetched_at': None
+                })
+            return jsonify({'success': True, 'accounts': result})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e), 'accounts': []}), 500
     
-    return jsonify({'accounts': result})
+    try:
+        # Get accounts from persistent storage
+        persisted_accounts = {acc['username']: acc for acc in persistence.get_all_accounts()}
+        
+        # Get accounts from database (if available) and merge
+        db_accounts = []
+        try:
+            accounts = db.get_all_accounts()
+            for account in accounts:
+                # Count tweets and outliers for this account
+                try:
+                    tweets = db.get_tweets_by_account(account.id)
+                    outlier_count = sum(1 for t in tweets if t.is_outlier)
+                except:
+                    tweets = []
+                    outlier_count = 0
+                
+                db_accounts.append({
+                    'username': account.username,
+                    'display_name': account.display_name or account.username,
+                    'follower_count': account.follower_count,
+                    'tweet_count': len(tweets),
+                    'outlier_count': outlier_count,
+                    'last_fetched_at': account.last_fetched_at.isoformat() if account.last_fetched_at else None
+                })
+        except Exception as e:
+            print(f"Error getting accounts from database: {e}")
+        
+        # Merge: use DB data if available, otherwise use persisted data
+        result = []
+        all_usernames = set(persisted_accounts.keys()) | {acc['username'] for acc in db_accounts}
+        
+        for username in all_usernames:
+            if username in [acc['username'] for acc in db_accounts]:
+                # Prefer DB data (has outlier counts)
+                result.append(next(acc for acc in db_accounts if acc['username'] == username))
+            elif username in persisted_accounts:
+                # Use persisted data
+                acc = persisted_accounts[username]
+                result.append({
+                    'username': acc['username'],
+                    'display_name': acc.get('display_name') or acc['username'],
+                    'follower_count': acc.get('follower_count', 0),
+                    'tweet_count': 0,
+                    'outlier_count': 0,
+                    'last_fetched_at': None
+                })
+        
+        return jsonify({'success': True, 'accounts': result})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e), 'accounts': []}), 500
 
 
 @app.route('/api/stats')
