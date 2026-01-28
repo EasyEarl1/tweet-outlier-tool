@@ -156,10 +156,13 @@ def get_accounts():
             return jsonify({'success': False, 'error': str(e), 'accounts': []}), 500
     
     try:
-        # Get accounts from persistent storage
-        persisted_accounts = {acc['username']: acc for acc in persistence.get_all_accounts()}
+        # Ensure tables exist before querying
+        try:
+            db._ensure_tables()
+        except:
+            pass
         
-        # Get accounts from database (if available) and merge
+        # Get accounts from database first (primary source)
         db_accounts = []
         try:
             accounts = db.get_all_accounts()
@@ -289,27 +292,46 @@ def add_accounts():
             return jsonify({'success': False, 'error': 'No valid accounts found'}), 400
         
         # Add accounts to both persistent storage and database
-        added = 0
+        added_to_persistence = 0
+        added_to_db = 0
         errors = []
+        
         for username in accounts_to_add:
             try:
-                # First, add to persistent storage (this always works)
-                if persistence.add_account(username):
-                    added += 1
-                    # Then try to add to database if available
-                    if db is not None:
+                # First, try to add to database (this is the primary storage)
+                db_success = False
+                if db is not None:
+                    try:
+                        db.add_account(username)
+                        added_to_db += 1
+                        db_success = True
+                    except Exception as db_error:
+                        # Database add failed - try to ensure tables exist and retry
+                        print(f"Warning: Could not add @{username} to database: {db_error}")
                         try:
+                            # Ensure tables exist and retry
+                            db._ensure_tables()
                             db.add_account(username)
-                        except Exception as db_error:
-                            # Database add failed, but persistent storage succeeded
-                            # This is okay - account is still saved
-                            print(f"Warning: Could not add @{username} to database: {db_error}")
-                else:
-                    errors.append(f"@{username}: Already exists")
+                            added_to_db += 1
+                            db_success = True
+                        except Exception as retry_error:
+                            print(f"Warning: Retry failed for @{username}: {retry_error}")
+                
+                # Also add to persistent storage (for cross-request persistence if KV is available)
+                try:
+                    if persistence.add_account(username):
+                        added_to_persistence += 1
+                except Exception as persist_error:
+                    print(f"Warning: Could not add @{username} to persistence: {persist_error}")
+                
+                # If both failed, report error
+                if not db_success and added_to_persistence == 0:
+                    errors.append(f"@{username}: Failed to add to storage")
+                    
             except Exception as e:
                 errors.append(f"@{username}: {str(e)}")
         
-        if added == 0 and not errors:
+        if added_to_db == 0 and added_to_persistence == 0 and not errors:
             return jsonify({
                 'success': False,
                 'error': 'No accounts were added'
@@ -317,9 +339,10 @@ def add_accounts():
         
         return jsonify({
             'success': True,
-            'added': added,
+            'added_to_db': added_to_db,
+            'added_to_persistence': added_to_persistence,
             'errors': errors,
-            'message': f'Successfully added {added} account(s)'
+            'message': f'Successfully added {max(added_to_db, added_to_persistence)} account(s)'
         })
     
     except Exception as e:
@@ -421,23 +444,46 @@ def fetch_tweets():
                 'error': 'Database not available. Please ensure database is initialized.'
             }), 500
         
-        # Get accounts from persistent storage first, then ensure they're in database
+        # Ensure tables exist before querying
+        try:
+            db._ensure_tables()
+        except Exception as e:
+            print(f"Warning: Could not ensure tables: {e}")
+        
+        # Get accounts from database first (primary source)
+        db_accounts = []
+        try:
+            accounts = db.get_all_accounts()
+            db_accounts = [acc.username for acc in accounts]
+        except Exception as e:
+            print(f"Warning: Could not get accounts from database: {e}")
+        
+        # Also get accounts from persistent storage and merge
         persisted_accounts = persistence.get_all_accounts()
-        if not persisted_accounts:
+        persisted_usernames = [acc['username'] for acc in persisted_accounts]
+        
+        # Combine both sources
+        all_usernames = list(set(db_accounts + persisted_usernames))
+        
+        if not all_usernames:
             return jsonify({
                 'success': False,
                 'error': 'No accounts found. Please add accounts first.'
             }), 400
         
-        # Ensure all persisted accounts are in the database
-        for acc in persisted_accounts:
-            username = acc['username']
+        # Ensure all accounts are in the database
+        for username in all_usernames:
             try:
                 # Try to get account from database
                 account = db.get_account(username)
                 if not account:
-                    # Account not in database, add it
-                    db.add_account(username, acc.get('display_name'), acc.get('follower_count'))
+                    # Account not in database, find it in persisted accounts and add it
+                    persisted_acc = next((acc for acc in persisted_accounts if acc['username'] == username), None)
+                    if persisted_acc:
+                        db.add_account(username, persisted_acc.get('display_name'), persisted_acc.get('follower_count'))
+                    else:
+                        # Just add with username
+                        db.add_account(username)
             except Exception as e:
                 print(f"Warning: Could not ensure @{username} is in database: {e}")
         
