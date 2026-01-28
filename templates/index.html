@@ -386,6 +386,7 @@
             <h2>📋 Account Management</h2>
             <div class="tabs">
                 <button class="tab active" onclick="switchTab('add', this)">Add Accounts</button>
+                <button class="tab" onclick="switchTab('settings', this)">Settings</button>
                 <button class="tab" onclick="switchTab('manage', this)">Manage Accounts</button>
             </div>
             
@@ -514,6 +515,26 @@
                 document.getElementById('stat-outliers').textContent = data.total_outliers;
             } catch (error) {
                 console.error('Error loading stats:', error);
+            }
+        }
+        
+        async function loadApiKeyStatus() {
+            try {
+                const response = await fetch('/api/settings/api-key');
+                const data = await response.json();
+                const statusDiv = document.getElementById('api-key-status');
+                const instructionsDiv = document.getElementById('api-key-instructions');
+                
+                if (data.api_key_set) {
+                    statusDiv.innerHTML = '<p style="color: #28a745; font-weight: bold;">✓ API Key is configured</p>';
+                    instructionsDiv.style.display = 'none';
+                } else {
+                    statusDiv.innerHTML = '<p style="color: #e74c3c; font-weight: bold;">⚠ API Key not configured</p>';
+                    instructionsDiv.style.display = 'block';
+                }
+            } catch (error) {
+                console.error('Error loading API key status:', error);
+                document.getElementById('api-key-status').innerHTML = '<p style="color: #e74c3c;">Error checking API key status</p>';
             }
         }
         

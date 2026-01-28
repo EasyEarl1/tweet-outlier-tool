@@ -6,7 +6,9 @@ from database import Database
 from twitter_api import TwitterAPI
 from data_fetcher import DataFetcher
 from analyzer import TweetAnalyzer
+from persistence import AccountPersistence
 from datetime import datetime, timedelta
+import os
 
 app = Flask(__name__)
 
@@ -23,6 +25,9 @@ except Exception as e:
     # Print full traceback for debugging in Vercel logs
     traceback.print_exc()
     db = None
+
+# Initialize persistent storage for accounts
+persistence = AccountPersistence()
 
 
 @app.route('/')
@@ -201,20 +206,67 @@ def add_accounts():
 def delete_account(username):
     """Delete an account"""
     try:
-        account = db.get_account(username)
-        if not account:
-            return jsonify({'success': False, 'error': 'Account not found'}), 404
+        # Remove from database if available
+        if db is not None:
+            try:
+                account = db.get_account(username)
+                if account:
+                    session = db.get_session()
+                    try:
+                        session.delete(account)
+                        session.commit()
+                    finally:
+                        session.close()
+            except:
+                pass  # Account might not exist in DB
         
-        session = db.get_session()
-        try:
-            session.delete(account)
-            session.commit()
+        # Remove from persistent storage
+        if persistence.remove_account(username):
             return jsonify({'success': True, 'message': f'Account @{username} deleted'})
-        finally:
-            session.close()
-    
+        else:
+            return jsonify({'success': False, 'error': 'Account not found'}), 404
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/accounts/list')
+def list_persisted_accounts():
+    """Get all accounts from persistent storage"""
+    try:
+        accounts = persistence.get_all_accounts()
+        return jsonify({
+            'success': True,
+            'accounts': accounts,
+            'count': len(accounts)
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/settings/api-key', methods=['GET'])
+def api_key_settings():
+    """API key management - show instructions or check if set"""
+    # Check if API key is set (don't expose the actual key)
+    api_key_set = bool(os.environ.get('TWITTER_API_KEY'))
+    return jsonify({
+        'success': True,
+        'api_key_set': api_key_set,
+        'instructions': {
+            'title': 'How to Add Your Twitter API Key',
+            'steps': [
+                '1. Go to your Vercel project dashboard',
+                '2. Navigate to Settings → Environment Variables',
+                '3. Click "Add New"',
+                '4. Add variable:',
+                '   - Key: TWITTER_API_KEY',
+                '   - Value: Your API key from twitterapi.io',
+                '   - Environment: Production, Preview, Development (select all)',
+                '5. Click "Save"',
+                '6. Redeploy your application'
+            ],
+            'note': 'Your API key is stored securely and never exposed in the code.'
+        }
+    })
 
 
 @app.route('/api/fetch', methods=['POST'])
