@@ -58,63 +58,19 @@ class Database:
     def __init__(self, db_path='tweet_outlier.db'):
         self.db_path = db_path
         
-        # ALWAYS use in-memory database on Vercel (file-based SQLite doesn't work)
-        # Check multiple ways to detect Vercel
-        is_vercel = False
-        try:
-            file_path = os.path.abspath(__file__) if '__file__' in globals() else ''
-            cwd = os.getcwd()
-            is_vercel = (
-                os.environ.get('VERCEL') == '1' or 
-                os.environ.get('VERCEL_ENV') or 
-                os.environ.get('NOW_REGION') or
-                '/var/task' in file_path or
-                '/var/task' in cwd
-            )
-        except:
-            # If we can't detect, assume Vercel and use in-memory
-            is_vercel = True
+        # SIMPLIFIED: Always use in-memory database to avoid filesystem issues
+        # This works everywhere (local dev and Vercel) and avoids all file permission problems
+        # Note: Data won't persist between requests on Vercel, but the app will work
+        connection_string = 'sqlite:///:memory:'
         
-        # On Vercel OR if detection fails, use in-memory
-        if is_vercel:
-            connection_string = 'sqlite:///:memory:'
-            print("Using in-memory database (Vercel detected or fallback)")
-            self.engine = create_engine(connection_string, echo=False, connect_args={'check_same_thread': False})
-            Base.metadata.create_all(self.engine)
-            self._ensure_columns()
-            self.Session = sessionmaker(bind=self.engine)
-            return
-        
-        # Local development - try file-based, but wrap everything in try-except
-        if not os.path.isabs(db_path):
-            try:
-                db_path = os.path.join(os.getcwd(), db_path)
-            except:
-                # Can't get cwd, use in-memory
-                connection_string = 'sqlite:///:memory:'
-                print("Cannot determine current directory - using in-memory database")
-                self.engine = create_engine(connection_string, echo=False, connect_args={'check_same_thread': False})
-                Base.metadata.create_all(self.engine)
-                self._ensure_columns()
-                self.Session = sessionmaker(bind=self.engine)
-                return
-        
-        connection_string = f'sqlite:///{db_path}'
-        
-        # Try file-based database - if ANYTHING fails, fall back to in-memory
         try:
             self.engine = create_engine(connection_string, echo=False, connect_args={'check_same_thread': False})
             Base.metadata.create_all(self.engine)
             self._ensure_columns()
             self.Session = sessionmaker(bind=self.engine)
         except Exception as e:
-            # File-based failed - use in-memory
-            print(f"File-based database failed ({str(e)[:200]}), using in-memory database")
-            connection_string = 'sqlite:///:memory:'
-            self.engine = create_engine(connection_string, echo=False, connect_args={'check_same_thread': False})
-            Base.metadata.create_all(self.engine)
-            self._ensure_columns()
-            self.Session = sessionmaker(bind=self.engine)
+            # If even in-memory fails, something is seriously wrong
+            raise Exception(f"Failed to initialize in-memory database: {str(e)}") from e
 
     def _ensure_columns(self):
         """
