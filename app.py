@@ -78,47 +78,60 @@ def get_outliers():
                     account_id=account_id,
                     min_multiplier=min_mult,
                     max_multiplier=max_mult,
-            limit=limit,
-            days_back=days,
-            sort_by=sort_by
-        )
-    else:
-        # Legacy: get only outliers
-        tweets = db.get_outlier_tweets(min_multiplier=min_mult or 2.0, limit=limit)
-        if account_filter:
-            tweets = [t for t in tweets if t.account.username == account_filter]
-        # Apply date filter if specified
-        if days:
-            from datetime import datetime, timedelta
-            cutoff = datetime.utcnow() - timedelta(days=days)
-            tweets = [t for t in tweets if t.created_at >= cutoff]
-        # Sort by date if requested
-        if sort_by == 'date':
-            tweets = sorted(tweets, key=lambda t: t.created_at, reverse=True)
-    
-    # Format for JSON
-    result = []
-    for tweet in tweets:
-        result.append({
-            'id': tweet.id,
-            'tweet_id': tweet.tweet_id,
-            'account': tweet.account.username,
-            'account_display': tweet.account.display_name or tweet.account.username,
-            'text': tweet.text or '',
-            'multiplier': round(tweet.outlier_multiplier, 2) if tweet.outlier_multiplier else 0.0,
-            'likes': tweet.likes,
-            'retweets': tweet.retweets,
-            'replies': tweet.replies,
-            'views': tweet.views,
-            'created_at': tweet.created_at.isoformat() if tweet.created_at else None,
-            'engagement_score': round(tweet.total_engagement, 2) if tweet.total_engagement else 0.0,
-            'is_outlier': bool(tweet.is_outlier)
+                    limit=limit,
+                    days_back=days,
+                    sort_by=sort_by
+                )
+            except Exception as e:
+                print(f"Error getting tweets: {e}")
+                return jsonify({'success': True, 'outliers': [], 'count': 0})
+        else:
+            # Legacy: get only outliers
+            try:
+                tweets = db.get_outlier_tweets(min_multiplier=min_mult or 2.0, limit=limit)
+                if account_filter:
+                    tweets = [t for t in tweets if t.account.username == account_filter]
+                # Apply date filter if specified
+                if days:
+                    from datetime import datetime, timedelta
+                    cutoff = datetime.utcnow() - timedelta(days=days)
+                    tweets = [t for t in tweets if t.created_at >= cutoff]
+                # Sort by date if requested
+                if sort_by == 'date':
+                    tweets = sorted(tweets, key=lambda t: t.created_at, reverse=True)
+            except Exception as e:
+                print(f"Error getting outlier tweets: {e}")
+                return jsonify({'success': True, 'outliers': [], 'count': 0})
+        
+        # Format for JSON
+        result = []
+        for tweet in tweets:
+            result.append({
+                'id': tweet.id,
+                'tweet_id': tweet.tweet_id,
+                'account': tweet.account.username,
+                'account_display': tweet.account.display_name or tweet.account.username,
+                'text': tweet.text or '',
+                'multiplier': round(tweet.outlier_multiplier, 2) if tweet.outlier_multiplier else 0.0,
+                'likes': tweet.likes,
+                'retweets': tweet.retweets,
+                'replies': tweet.replies,
+                'views': tweet.views,
+                'created_at': tweet.created_at.isoformat() if tweet.created_at else None,
+                'engagement_score': round(tweet.total_engagement, 2) if tweet.total_engagement else 0.0,
+                'is_outlier': bool(tweet.is_outlier)
+            })
+        
+        return jsonify({
+            'success': True,
+            'outliers': result,
+            'count': len(result)
         })
-    
-    return jsonify({
-        'outliers': result,
-        'count': len(result)
-    })
+    except Exception as e:
+        print(f"Error in get_outliers: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': True, 'outliers': [], 'count': 0})
 
 
 @app.route('/api/accounts')
