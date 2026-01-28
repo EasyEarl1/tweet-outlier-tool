@@ -58,11 +58,19 @@ class Database:
     def __init__(self, db_path='tweet_outlier.db'):
         self.db_path = db_path
         # Check if we're on Vercel (multiple ways to detect)
+        # Vercel uses /var/task for serverless functions - check both file path and cwd
+        try:
+            file_path = os.path.abspath(__file__) if '__file__' in globals() else ''
+        except:
+            file_path = ''
+        cwd = os.getcwd()
+        
         is_vercel = (
-            os.environ.get('VERCEL') or 
+            os.environ.get('VERCEL') == '1' or 
             os.environ.get('VERCEL_ENV') or 
             os.environ.get('NOW_REGION') or
-            '/var/task' in os.path.abspath(__file__)  # Vercel uses /var/task
+            '/var/task' in file_path or
+            '/var/task' in cwd
         )
         
         # On Vercel, use in-memory database by default (file-based SQLite doesn't work reliably)
