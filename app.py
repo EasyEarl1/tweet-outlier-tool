@@ -379,6 +379,33 @@ def fetch_tweets():
             except ValueError:
                 days_back = None
         
+        # Check if database is available
+        if db is None:
+            return jsonify({
+                'success': False,
+                'error': 'Database not available. Please ensure database is initialized.'
+            }), 500
+        
+        # Get accounts from persistent storage first, then ensure they're in database
+        persisted_accounts = persistence.get_all_accounts()
+        if not persisted_accounts:
+            return jsonify({
+                'success': False,
+                'error': 'No accounts found. Please add accounts first.'
+            }), 400
+        
+        # Ensure all persisted accounts are in the database
+        for acc in persisted_accounts:
+            username = acc['username']
+            try:
+                # Try to get account from database
+                account = db.get_account(username)
+                if not account:
+                    # Account not in database, add it
+                    db.add_account(username, acc.get('display_name'), acc.get('follower_count'))
+            except Exception as e:
+                print(f"Warning: Could not ensure @{username} is in database: {e}")
+        
         twitter_api = TwitterAPI()
         fetcher = DataFetcher(db, twitter_api)
         
