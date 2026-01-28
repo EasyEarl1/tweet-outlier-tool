@@ -253,15 +253,32 @@ def add_accounts():
         if not accounts_to_add:
             return jsonify({'success': False, 'error': 'No valid accounts found'}), 400
         
-        # Add accounts
+        # Add accounts to both persistent storage and database
         added = 0
         errors = []
         for username in accounts_to_add:
             try:
-                db.add_account(username)
-                added += 1
+                # First, add to persistent storage (this always works)
+                if persistence.add_account(username):
+                    added += 1
+                    # Then try to add to database if available
+                    if db is not None:
+                        try:
+                            db.add_account(username)
+                        except Exception as db_error:
+                            # Database add failed, but persistent storage succeeded
+                            # This is okay - account is still saved
+                            print(f"Warning: Could not add @{username} to database: {db_error}")
+                else:
+                    errors.append(f"@{username}: Already exists")
             except Exception as e:
                 errors.append(f"@{username}: {str(e)}")
+        
+        if added == 0 and not errors:
+            return jsonify({
+                'success': False,
+                'error': 'No accounts were added'
+            }), 400
         
         return jsonify({
             'success': True,

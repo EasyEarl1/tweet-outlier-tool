@@ -841,11 +841,14 @@
                     loadStats();
                     loadAccounts();
                     loadOutliers();
+                    loadAccountsList(); // Reload the managed accounts list
                     
                     // Fetch tweets if requested
                     if (fetchAfter) {
                         showMessage('success', 'Accounts added. Starting to fetch tweets...');
-                        // Note: fetchAllAccounts will auto-analyze
+                        // Wait a moment for accounts to be saved
+                        await new Promise(resolve => setTimeout(resolve, 500));
+                        // Fetch and analyze
                         await fetchAllAccounts();
                     }
                 } else {
