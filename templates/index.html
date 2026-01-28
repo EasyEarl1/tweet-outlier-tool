@@ -406,6 +406,47 @@
                 </p>
             </div>
             
+            <div id="settings-tab" class="tab-content">
+                <h2 style="color: #333; margin-bottom: 20px; font-size: 1.5em;">Settings</h2>
+                
+                <div class="settings-section" style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+                    <h3 style="color: #333; margin-bottom: 15px;">API Key Configuration</h3>
+                    <div id="api-key-status" style="margin: 20px 0;">
+                        <p>Checking API key status...</p>
+                    </div>
+                    <div id="api-key-instructions" style="display: none; background: white; padding: 20px; border-radius: 8px; margin-top: 15px; border: 1px solid #e0e0e0;">
+                        <h4 style="margin-bottom: 15px; color: #333;">How to Add Your Twitter API Key</h4>
+                        <ol style="line-height: 2; padding-left: 20px; color: #666;">
+                            <li>Go to your <a href="https://vercel.com/dashboard" target="_blank" style="color: #667eea;">Vercel project dashboard</a></li>
+                            <li>Navigate to <strong>Settings</strong> → <strong>Environment Variables</strong></li>
+                            <li>Click <strong>"Add New"</strong></li>
+                            <li>Add the following variable:
+                                <ul style="margin-top: 10px; padding-left: 20px;">
+                                    <li><strong>Key:</strong> <code style="background: #f0f0f0; padding: 2px 6px; border-radius: 4px;">TWITTER_API_KEY</code></li>
+                                    <li><strong>Value:</strong> Your API key from <a href="https://twitterapi.io" target="_blank" style="color: #667eea;">twitterapi.io</a></li>
+                                    <li><strong>Environment:</strong> Production, Preview, Development (select all)</li>
+                                </ul>
+                            </li>
+                            <li>Click <strong>"Save"</strong></li>
+                            <li><strong>Redeploy</strong> your application for changes to take effect</li>
+                        </ol>
+                        <p style="margin-top: 15px; color: #666; font-size: 0.9em;">
+                            <strong>Note:</strong> Your API key is stored securely in Vercel and never exposed in the code.
+                        </p>
+                    </div>
+                </div>
+                
+                <div class="settings-section" style="background: #f8f9fa; padding: 20px; border-radius: 8px;">
+                    <h3 style="color: #333; margin-bottom: 15px;">Account Persistence</h3>
+                    <p style="color: #666; margin-top: 10px;">
+                        Your accounts are saved in persistent storage. They will persist across deployments.
+                    </p>
+                    <p style="color: #666; font-size: 0.9em; margin-top: 10px;">
+                        <strong>Note:</strong> If you've set up Vercel KV (Upstash Redis), accounts are stored there. Otherwise, they use in-memory storage.
+                    </p>
+                </div>
+            </div>
+            
             <div id="manage-tab" class="tab-content">
                 <div id="manage-message" class="message"></div>
                 <div style="margin-bottom: 20px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
@@ -763,6 +804,8 @@
             
             if (tabName === 'manage') {
                 loadAccountsList();
+            } else if (tabName === 'settings') {
+                loadApiKeyStatus();
             }
         }
         
