@@ -57,23 +57,41 @@ class Database:
     
     def __init__(self, db_path='tweet_outlier.db'):
         self.db_path = db_path
-        self.engine = create_engine(f'sqlite:///{db_path}', echo=False)
-        Base.metadata.create_all(self.engine)
-        self._ensure_columns()
-        self.Session = sessionmaker(bind=self.engine)
+        try:
+            # Use absolute path for better compatibility with Vercel
+            if not os.path.isabs(db_path):
+                # For relative paths, use current directory or /tmp on Vercel
+                if os.environ.get('VERCEL') or os.environ.get('VERCEL_ENV'):
+                    db_path = os.path.join('/tmp', os.path.basename(db_path))
+                else:
+                    db_path = os.path.join(os.getcwd(), db_path)
+            self.engine = create_engine(f'sqlite:///{db_path}', echo=False, connect_args={'check_same_thread': False})
+            Base.metadata.create_all(self.engine)
+            self._ensure_columns()
+            self.Session = sessionmaker(bind=self.engine)
+        except Exception as e:
+            # Re-raise with more context for debugging
+            raise Exception(f"Failed to initialize database at {db_path}: {str(e)}") from e
 
     def _ensure_columns(self):
         """
         Ensure new columns exist in existing databases.
         Currently adds last_fetched_at to accounts if missing.
         """
-        from sqlalchemy import inspect, text
-        inspector = inspect(self.engine)
-        account_columns = [col['name'] for col in inspector.get_columns('accounts')]
-        if 'last_fetched_at' not in account_columns:
-            with self.engine.connect() as conn:
-                conn.execute(text('ALTER TABLE accounts ADD COLUMN last_fetched_at DATETIME'))
-                conn.commit()
+        try:
+            from sqlalchemy import inspect, text
+            inspector = inspect(self.engine)
+            # Check if accounts table exists
+            if 'accounts' in inspector.get_table_names():
+                account_columns = [col['name'] for col in inspector.get_columns('accounts')]
+                if 'last_fetched_at' not in account_columns:
+                    with self.engine.connect() as conn:
+                        conn.execute(text('ALTER TABLE accounts ADD COLUMN last_fetched_at DATETIME'))
+                        conn.commit()
+        except Exception as e:
+            # If table doesn't exist yet, that's fine - it will be created by Base.metadata.create_all
+            # Just log and continue
+            pass
     
     def get_session(self):
         """Get a new database session"""

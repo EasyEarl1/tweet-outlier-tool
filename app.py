@@ -9,7 +9,23 @@ from analyzer import TweetAnalyzer
 from datetime import datetime, timedelta
 
 app = Flask(__name__)
-db = Database()
+
+# Initialize database with error handling for Vercel
+try:
+    # Use /tmp directory on Vercel for SQLite (ephemeral but writable)
+    import os
+    if os.environ.get('VERCEL'):
+        db_path = '/tmp/tweet_outlier.db'
+    else:
+        db_path = 'tweet_outlier.db'
+    db = Database(db_path=db_path)
+except Exception as e:
+    # On Vercel, if database init fails, create a dummy db object
+    # This allows the app to start even if DB isn't available
+    import traceback
+    print(f"Warning: Database initialization failed: {e}")
+    print(traceback.format_exc())
+    db = None
 
 
 @app.route('/')
