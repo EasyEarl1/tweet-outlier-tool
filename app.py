@@ -39,38 +39,45 @@ def index():
 @app.route('/api/outliers')
 def get_outliers():
     """Get outlier tweets with filters"""
-    min_multiplier = request.args.get('min_multiplier', None)
-    max_multiplier = request.args.get('max_multiplier', None)
-    account_filter = request.args.get('account', None)
-    limit = int(request.args.get('limit', 100))
-    show_all = request.args.get('show_all', 'false').lower() == 'true'
-    days_back = request.args.get('days_back', None)
-    sort_by = request.args.get('sort_by', 'multiplier')  # 'multiplier' or 'date'
+    if db is None:
+        return jsonify({'success': True, 'outliers': [], 'count': 0})
     
-    # Parse days_back
-    days = int(days_back) if days_back else None
-    
-    # Parse multipliers (allow negative/zero for negative outliers)
-    min_mult = float(min_multiplier) if min_multiplier else None
-    max_mult = float(max_multiplier) if max_multiplier else None
-    
-    # If no min_multiplier specified and not showing all, default to 2.0 for positive outliers
-    if min_mult is None and not show_all:
-        min_mult = 2.0
-    
-    # Get tweets - use get_all_tweets_with_multipliers to get all tweets with multipliers
-    if show_all or min_mult is not None or max_mult is not None:
-        # Get all tweets with multipliers (not just outliers)
-        if account_filter:
-            account = db.get_account(account_filter)
-            account_id = account.id if account else None
-        else:
-            account_id = None
+    try:
+        min_multiplier = request.args.get('min_multiplier', None)
+        max_multiplier = request.args.get('max_multiplier', None)
+        account_filter = request.args.get('account', None)
+        limit = int(request.args.get('limit', 100))
+        show_all = request.args.get('show_all', 'false').lower() == 'true'
+        days_back = request.args.get('days_back', None)
+        sort_by = request.args.get('sort_by', 'multiplier')  # 'multiplier' or 'date'
         
-        tweets = db.get_all_tweets_with_multipliers(
-            account_id=account_id,
-            min_multiplier=min_mult,
-            max_multiplier=max_mult,
+        # Parse days_back
+        days = int(days_back) if days_back else None
+        
+        # Parse multipliers (allow negative/zero for negative outliers)
+        min_mult = float(min_multiplier) if min_multiplier else None
+        max_mult = float(max_multiplier) if max_multiplier else None
+        
+        # If no min_multiplier specified and not showing all, default to 2.0 for positive outliers
+        if min_mult is None and not show_all:
+            min_mult = 2.0
+        
+        # Get tweets - use get_all_tweets_with_multipliers to get all tweets with multipliers
+        if show_all or min_mult is not None or max_mult is not None:
+            # Get all tweets with multipliers (not just outliers)
+            account_id = None
+            if account_filter:
+                try:
+                    account = db.get_account(account_filter)
+                    account_id = account.id if account else None
+                except:
+                    account_id = None
+            
+            try:
+                tweets = db.get_all_tweets_with_multipliers(
+                    account_id=account_id,
+                    min_multiplier=min_mult,
+                    max_multiplier=max_mult,
             limit=limit,
             days_back=days,
             sort_by=sort_by
