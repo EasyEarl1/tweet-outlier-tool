@@ -57,36 +57,41 @@ class Database:
     
     def __init__(self, db_path='tweet_outlier.db'):
         self.db_path = db_path
-        # Check if we're on Vercel
-        is_vercel = os.environ.get('VERCEL') or os.environ.get('VERCEL_ENV')
+        # Check if we're on Vercel (multiple ways to detect)
+        is_vercel = (
+            os.environ.get('VERCEL') or 
+            os.environ.get('VERCEL_ENV') or 
+            os.environ.get('NOW_REGION') or
+            '/var/task' in os.path.abspath(__file__)  # Vercel uses /var/task
+        )
         
         # On Vercel, use in-memory database by default (file-based SQLite doesn't work reliably)
         if is_vercel:
             connection_string = 'sqlite:///:memory:'
             print("Using in-memory database on Vercel (data won't persist between requests)")
-        else:
-            # Local development - use file-based database
-            if not os.path.isabs(db_path):
-                db_path = os.path.join(os.getcwd(), db_path)
-            connection_string = f'sqlite:///{db_path}'
-        
-        try:
             self.engine = create_engine(connection_string, echo=False, connect_args={'check_same_thread': False})
             Base.metadata.create_all(self.engine)
             self._ensure_columns()
             self.Session = sessionmaker(bind=self.engine)
-        except Exception as e:
-            # If file-based fails, try in-memory as fallback
-            if connection_string != 'sqlite:///:memory:':
+        else:
+            # Local development - try file-based database first, fall back to in-memory if it fails
+            if not os.path.isabs(db_path):
+                db_path = os.path.join(os.getcwd(), db_path)
+            connection_string = f'sqlite:///{db_path}'
+            
+            try:
+                self.engine = create_engine(connection_string, echo=False, connect_args={'check_same_thread': False})
+                Base.metadata.create_all(self.engine)
+                self._ensure_columns()
+                self.Session = sessionmaker(bind=self.engine)
+            except Exception as e:
+                # If file-based fails (e.g., on Vercel or read-only filesystem), use in-memory
                 print(f"File-based database failed ({e}), falling back to in-memory database")
                 connection_string = 'sqlite:///:memory:'
                 self.engine = create_engine(connection_string, echo=False, connect_args={'check_same_thread': False})
                 Base.metadata.create_all(self.engine)
                 self._ensure_columns()
                 self.Session = sessionmaker(bind=self.engine)
-            else:
-                # Re-raise if in-memory also fails (shouldn't happen)
-                raise Exception(f"Failed to initialize database: {str(e)}") from e
 
     def _ensure_columns(self):
         """
