@@ -57,49 +57,36 @@ class Database:
     
     def __init__(self, db_path='tweet_outlier.db'):
         self.db_path = db_path
+        # Check if we're on Vercel
+        is_vercel = os.environ.get('VERCEL') or os.environ.get('VERCEL_ENV')
+        
+        # On Vercel, use in-memory database by default (file-based SQLite doesn't work reliably)
+        if is_vercel:
+            connection_string = 'sqlite:///:memory:'
+            print("Using in-memory database on Vercel (data won't persist between requests)")
+        else:
+            # Local development - use file-based database
+            if not os.path.isabs(db_path):
+                db_path = os.path.join(os.getcwd(), db_path)
+            connection_string = f'sqlite:///{db_path}'
+        
         try:
-            # Check if we're on Vercel
-            is_vercel = os.environ.get('VERCEL') or os.environ.get('VERCEL_ENV')
-            
-            if is_vercel:
-                # On Vercel, try /tmp first, but fall back to in-memory if that fails
-                try:
-                    tmp_path = '/tmp/tweet_outlier.db'
-                    # Ensure /tmp directory exists (it should, but just in case)
-                    os.makedirs('/tmp', exist_ok=True)
-                    # Test if we can write to /tmp
-                    test_file = '/tmp/.test_write'
-                    try:
-                        with open(test_file, 'w') as f:
-                            f.write('test')
-                        os.remove(test_file)
-                        db_path = tmp_path
-                    except:
-                        # Can't write to /tmp, use in-memory database
-                        db_path = ':memory:'
-                        print("Warning: /tmp not writable on Vercel, using in-memory database")
-                except Exception as tmp_error:
-                    # Fall back to in-memory database
-                    db_path = ':memory:'
-                    print(f"Warning: Could not use /tmp on Vercel ({tmp_error}), using in-memory database")
-            else:
-                # Local development - use file-based database
-                if not os.path.isabs(db_path):
-                    db_path = os.path.join(os.getcwd(), db_path)
-            
-            # Create engine with appropriate connection string
-            if db_path == ':memory:':
-                connection_string = 'sqlite:///:memory:'
-            else:
-                connection_string = f'sqlite:///{db_path}'
-            
             self.engine = create_engine(connection_string, echo=False, connect_args={'check_same_thread': False})
             Base.metadata.create_all(self.engine)
             self._ensure_columns()
             self.Session = sessionmaker(bind=self.engine)
         except Exception as e:
-            # Re-raise with more context for debugging
-            raise Exception(f"Failed to initialize database at {db_path}: {str(e)}") from e
+            # If file-based fails, try in-memory as fallback
+            if connection_string != 'sqlite:///:memory:':
+                print(f"File-based database failed ({e}), falling back to in-memory database")
+                connection_string = 'sqlite:///:memory:'
+                self.engine = create_engine(connection_string, echo=False, connect_args={'check_same_thread': False})
+                Base.metadata.create_all(self.engine)
+                self._ensure_columns()
+                self.Session = sessionmaker(bind=self.engine)
+            else:
+                # Re-raise if in-memory also fails (shouldn't happen)
+                raise Exception(f"Failed to initialize database: {str(e)}") from e
 
     def _ensure_columns(self):
         """
