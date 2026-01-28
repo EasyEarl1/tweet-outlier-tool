@@ -109,6 +109,12 @@ class Database:
     
     def add_account(self, username, display_name=None, follower_count=0):
         """Add or update an account"""
+        # Ensure tables exist before adding
+        try:
+            self._ensure_tables()
+        except Exception as e:
+            print(f"Warning: Could not ensure tables: {e}")
+        
         session = self.get_session()
         try:
             account = session.query(Account).filter_by(username=username).first()
@@ -127,7 +133,27 @@ class Database:
             return account
         except Exception as e:
             session.rollback()
-            raise e
+            # If tables don't exist, try to create them and retry
+            try:
+                self._ensure_tables()
+                # Retry the operation
+                account = session.query(Account).filter_by(username=username).first()
+                if account:
+                    account.display_name = display_name or account.display_name
+                    account.follower_count = follower_count or account.follower_count
+                    account.last_updated = datetime.utcnow()
+                else:
+                    account = Account(
+                        username=username,
+                        display_name=display_name,
+                        follower_count=follower_count
+                    )
+                    session.add(account)
+                session.commit()
+                return account
+            except Exception as retry_error:
+                session.rollback()
+                raise Exception(f"Failed to add account after retry: {retry_error}") from e
         finally:
             session.close()
     

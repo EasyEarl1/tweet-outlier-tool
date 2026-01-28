@@ -211,20 +211,55 @@ def get_accounts():
 @app.route('/api/stats')
 def get_stats():
     """Get database statistics"""
-    accounts = db.get_all_accounts()
-    total_tweets = 0
-    total_outliers = 0
+    if db is None:
+        # If database not available, return stats from persistent storage
+        try:
+            accounts = persistence.get_all_accounts()
+            return jsonify({
+                'total_accounts': len(accounts),
+                'total_tweets': 0,
+                'total_outliers': 0
+            })
+        except:
+            return jsonify({
+                'total_accounts': 0,
+                'total_tweets': 0,
+                'total_outliers': 0
+            })
     
-    for account in accounts:
-        tweets = db.get_tweets_by_account(account.id)
-        total_tweets += len(tweets)
-        total_outliers += sum(1 for t in tweets if t.is_outlier)
-    
-    return jsonify({
-        'total_accounts': len(accounts),
-        'total_tweets': total_tweets,
-        'total_outliers': total_outliers
-    })
+    try:
+        accounts = db.get_all_accounts()
+        total_tweets = 0
+        total_outliers = 0
+        
+        for account in accounts:
+            try:
+                tweets = db.get_tweets_by_account(account.id)
+                total_tweets += len(tweets)
+                total_outliers += sum(1 for t in tweets if t.is_outlier)
+            except:
+                pass  # Skip accounts with errors
+        
+        return jsonify({
+            'total_accounts': len(accounts),
+            'total_tweets': total_tweets,
+            'total_outliers': total_outliers
+        })
+    except Exception as e:
+        # Fallback to persistent storage
+        try:
+            accounts = persistence.get_all_accounts()
+            return jsonify({
+                'total_accounts': len(accounts),
+                'total_tweets': 0,
+                'total_outliers': 0
+            })
+        except:
+            return jsonify({
+                'total_accounts': 0,
+                'total_tweets': 0,
+                'total_outliers': 0
+            })
 
 
 @app.route('/api/accounts/add', methods=['POST'])
