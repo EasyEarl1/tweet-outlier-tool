@@ -58,10 +58,20 @@ class Database:
     def __init__(self, db_path='tweet_outlier.db'):
         self.db_path = db_path
         
-        # SIMPLIFIED: Always use in-memory database to avoid filesystem issues
-        # This works everywhere (local dev and Vercel) and avoids all file permission problems
-        # Note: Data won't persist between requests on Vercel, but the app will work
-        connection_string = 'sqlite:///:memory:'
+        # Detect if we're running on Vercel (serverless environment)
+        is_vercel = os.environ.get('VERCEL') == '1' or os.environ.get('VERCEL_ENV') is not None
+        
+        if is_vercel:
+            # On Vercel, use in-memory database (ephemeral filesystem)
+            connection_string = 'sqlite:///:memory:'
+            print("Database initialized with in-memory SQLite (Vercel environment)")
+        else:
+            # Local development: use file-based database for persistence
+            # Ensure the database file path is absolute
+            if not os.path.isabs(db_path):
+                db_path = os.path.join(os.getcwd(), db_path)
+            connection_string = f'sqlite:///{db_path}'
+            print(f"Database initialized with file-based SQLite: {db_path}")
         
         try:
             self.engine = create_engine(connection_string, echo=False, connect_args={'check_same_thread': False})
@@ -69,12 +79,19 @@ class Database:
             Base.metadata.create_all(self.engine, checkfirst=True)
             self._ensure_columns()
             self.Session = sessionmaker(bind=self.engine)
-            print("Database initialized successfully with in-memory SQLite")
         except Exception as e:
-            # If even in-memory fails, something is seriously wrong
-            import traceback
-            traceback.print_exc()
-            raise Exception(f"Failed to initialize in-memory database: {str(e)}") from e
+            # If file-based fails on local, try in-memory as fallback
+            if not is_vercel:
+                print(f"Warning: Could not create file-based database ({db_path}), falling back to in-memory")
+                connection_string = 'sqlite:///:memory:'
+                self.engine = create_engine(connection_string, echo=False, connect_args={'check_same_thread': False})
+                Base.metadata.create_all(self.engine, checkfirst=True)
+                self._ensure_columns()
+                self.Session = sessionmaker(bind=self.engine)
+            else:
+                import traceback
+                traceback.print_exc()
+                raise Exception(f"Failed to initialize database: {str(e)}") from e
     
     def _ensure_tables(self):
         """Ensure tables exist - call this before any queries if needed"""
